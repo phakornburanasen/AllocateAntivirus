@@ -988,6 +988,7 @@ async function exportAllocateAntivirusWorkbook(records: AssetRecord[]) {
 
 function fillReportSheet(sheet: Worksheet, records: AssetRecord[]) {
   sheet.columns = [
+    { header: 'NO.', key: 'no', width: 8 },
     { header: 'HOSTNAME', key: 'hostname', width: 24 },
     { header: 'IP ADDRESS', key: 'ip_address', width: 18 },
     { header: 'USERNAME', key: 'username', width: 18 },
@@ -996,8 +997,9 @@ function fillReportSheet(sheet: Worksheet, records: AssetRecord[]) {
     { header: 'NOTE', key: 'note', width: 36 },
     { header: 'ACTIVE', key: 'Active', width: 12 },
   ]
-  records.forEach((record) => {
+  records.forEach((record, index) => {
     sheet.addRow({
+      no: index + 1,
       hostname: cellText(record.hostname),
       ip_address: cellText(record.ip_address),
       username: cellText(record.username),
@@ -1012,11 +1014,12 @@ function fillReportSheet(sheet: Worksheet, records: AssetRecord[]) {
 
 function fillSummarySheet(sheet: Worksheet, grouped: Map<string, AssetRecord[]>) {
   sheet.columns = [
+    { header: 'NO.', key: 'no', width: 8 },
     { header: 'DEP', key: 'dep', width: 24 },
     { header: 'COUNT', key: 'count', width: 14 },
   ]
-  Array.from(grouped.entries()).forEach(([dep, rows]) => {
-    sheet.addRow({ dep, count: rows.length })
+  Array.from(grouped.entries()).forEach(([dep, rows], index) => {
+    sheet.addRow({ no: index + 1, dep, count: rows.length })
   })
   styleWorksheet(sheet)
 }
