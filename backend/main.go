@@ -74,6 +74,7 @@ type assetRecord struct {
 	Username  *string `json:"username"`
 	Users     *string `json:"users"`
 	Note      *string `json:"note"`
+	Dep       *string `json:"dep"`
 	ImagePNG  *string `json:"img_png"`
 	AssetNA   *string `json:"asset_na"`
 	Active    string  `json:"Active"`
@@ -341,7 +342,7 @@ func (a *app) getAssets(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) listAssets(w http.ResponseWriter, r *http.Request) {
 	rows, err := a.db.QueryContext(r.Context(), `
-SELECT id, hostname, ip_address, username, users, note, img_png, asset_na, Active
+SELECT id, hostname, ip_address, username, users, note, dep, img_png, asset_na, Active
 FROM dbo.allocate_antivirus
 ORDER BY id DESC`)
 	if err != nil {
@@ -374,7 +375,7 @@ func (a *app) getAsset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	row := a.db.QueryRowContext(r.Context(), `
-SELECT id, hostname, ip_address, username, users, note, img_png, asset_na, Active
+SELECT id, hostname, ip_address, username, users, note, dep, img_png, asset_na, Active
 FROM dbo.allocate_antivirus
 WHERE id = @p1`, id)
 	rec, err := scanAsset(row)
@@ -449,16 +450,16 @@ func (a *app) saveAssetValues(w http.ResponseWriter, r *http.Request, action str
 
 	if action == "create" || (action == "update" && id == 0) {
 		insertSQL := `
-INSERT INTO dbo.allocate_antivirus (hostname, ip_address, username, users, note, img_png, asset_na, Active)
-VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)`
+INSERT INTO dbo.allocate_antivirus (hostname, ip_address, username, users, note, dep, img_png, asset_na, Active)
+VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9)`
 		if a.imgBinary {
 			insertSQL = `
-INSERT INTO dbo.allocate_antivirus (hostname, ip_address, username, users, note, img_png, asset_na, Active)
-VALUES (@p1, @p2, @p3, @p4, @p5, CONVERT(varbinary(max), @p6), @p7, @p8)`
+INSERT INTO dbo.allocate_antivirus (hostname, ip_address, username, users, note, dep, img_png, asset_na, Active)
+VALUES (@p1, @p2, @p3, @p4, @p5, @p6, CONVERT(varbinary(max), @p7), @p8, @p9)`
 		}
 		_, err := a.db.ExecContext(r.Context(), insertSQL,
 			nullable(values["hostname"]), nullable(values["ip_address"]), nullable(values["username"]),
-			nullable(values["users"]), nullable(values["note"]), imgValue, nullable(values["asset_na"]), active)
+			nullable(values["users"]), nullable(values["note"]), nullable(values["dep"]), imgValue, nullable(values["asset_na"]), active)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, mutationResponse{Success: false, Message: "DB Error: " + err.Error()})
 			return
@@ -473,17 +474,17 @@ VALUES (@p1, @p2, @p3, @p4, @p5, CONVERT(varbinary(max), @p6), @p7, @p8)`
 	}
 	updateSQL := `
 UPDATE dbo.allocate_antivirus
-SET hostname = @p1, ip_address = @p2, username = @p3, users = @p4, note = @p5, img_png = @p6, asset_na = @p7, Active = @p8
-WHERE id = @p9`
+SET hostname = @p1, ip_address = @p2, username = @p3, users = @p4, note = @p5, dep = @p6, img_png = @p7, asset_na = @p8, Active = @p9
+WHERE id = @p10`
 	if a.imgBinary {
 		updateSQL = `
 UPDATE dbo.allocate_antivirus
-SET hostname = @p1, ip_address = @p2, username = @p3, users = @p4, note = @p5, img_png = CONVERT(varbinary(max), @p6), asset_na = @p7, Active = @p8
-WHERE id = @p9`
+SET hostname = @p1, ip_address = @p2, username = @p3, users = @p4, note = @p5, dep = @p6, img_png = CONVERT(varbinary(max), @p7), asset_na = @p8, Active = @p9
+WHERE id = @p10`
 	}
 	_, err := a.db.ExecContext(r.Context(), updateSQL,
 		nullable(values["hostname"]), nullable(values["ip_address"]), nullable(values["username"]),
-		nullable(values["users"]), nullable(values["note"]), imgValue, nullable(values["asset_na"]), active, id)
+		nullable(values["users"]), nullable(values["note"]), nullable(values["dep"]), imgValue, nullable(values["asset_na"]), active, id)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, mutationResponse{Success: false, Message: "DB Error: " + err.Error()})
 		return
@@ -518,9 +519,9 @@ type scanner interface {
 
 func scanAsset(row scanner) (assetRecord, error) {
 	var rec assetRecord
-	var hostname, ipAddress, username, users, note, assetNA, active sql.NullString
+	var hostname, ipAddress, username, users, note, dep, assetNA, active sql.NullString
 	var rawImage any
-	if err := row.Scan(&rec.ID, &hostname, &ipAddress, &username, &users, &note, &rawImage, &assetNA, &active); err != nil {
+	if err := row.Scan(&rec.ID, &hostname, &ipAddress, &username, &users, &note, &dep, &rawImage, &assetNA, &active); err != nil {
 		return rec, err
 	}
 	rec.Hostname = nullStringPtr(hostname)
@@ -528,6 +529,7 @@ func scanAsset(row scanner) (assetRecord, error) {
 	rec.Username = nullStringPtr(username)
 	rec.Users = nullStringPtr(users)
 	rec.Note = nullStringPtr(note)
+	rec.Dep = nullStringPtr(dep)
 	rec.ImagePNG = stringPtrFromImage(rawImage)
 	rec.AssetNA = nullStringPtr(assetNA)
 	rec.Active = activeValue(active.String)

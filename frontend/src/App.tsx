@@ -43,6 +43,7 @@ type AssetRecord = {
   username?: string | null
   users?: string | null
   note?: string | null
+  dep?: string | null
   img_png?: string | null
   asset_na?: string | null
   Active?: string | null
@@ -56,6 +57,7 @@ type AssetForm = {
   username: string
   users: string
   note: string
+  dep: string
   asset_na: string
   Active: string
 }
@@ -76,6 +78,7 @@ const emptyForm: AssetForm = {
   username: '',
   users: '',
   note: '',
+  dep: '',
   asset_na: '',
   Active: 'Y',
 }
@@ -241,7 +244,7 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
     const needle = search.trim().toLowerCase()
     if (!needle) return records
     return records.filter((row) =>
-      [row.hostname, row.ip_address, row.username, row.users, row.note, row.asset_na, row.Active]
+      [row.hostname, row.ip_address, row.username, row.users, row.dep, row.note, row.asset_na, row.Active]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
@@ -293,6 +296,7 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
         username: row.username || '',
         users: row.users || '',
         note: row.note || '',
+        dep: row.dep || '',
         asset_na: row.asset_na || '',
         Active: normalizeActive(row.Active),
       })
@@ -492,6 +496,7 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
                   <th>IP Address</th>
                   <th>Username</th>
                   <th>Users</th>
+                  <th>Dep</th>
                   <th>Note</th>
                   <th>Images</th>
                   <th>Active</th>
@@ -500,9 +505,9 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={10}><div className="empty-state"><Loader2 className="spin" /> Loading records...</div></td></tr>
+                  <tr><td colSpan={11}><div className="empty-state"><Loader2 className="spin" /> Loading records...</div></td></tr>
                 ) : visibleRecords.length === 0 ? (
-                  <tr><td colSpan={10}><div className="empty-state">No records found.</div></td></tr>
+                  <tr><td colSpan={11}><div className="empty-state">No records found.</div></td></tr>
                 ) : (
                   visibleRecords.map((row, index) => (
                     <tr key={row.id}>
@@ -512,6 +517,7 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
                       <td>{row.ip_address || '-'}</td>
                       <td>{row.username || '-'}</td>
                       <td>{row.users || '-'}</td>
+                      <td>{row.dep || '-'}</td>
                       <td className="truncate-cell" title={row.note || undefined}>{row.note || '-'}</td>
                       <td>
                         <div className="thumb-row">
@@ -617,11 +623,15 @@ function AssetModal({
             <TextField label="IP Address" value={form.ip_address} onChange={(value) => onChange('ip_address', value)} />
             <TextField label="Username" value={form.username} onChange={(value) => onChange('username', value)} />
             <TextField label="Users" value={form.users} onChange={(value) => onChange('users', value)} />
+            <TextField label="Dep" value={form.dep} onChange={(value) => onChange('dep', value)} />
             <label className="field">
               <span>Active</span>
               <button type="button" className="active-switch" aria-pressed={form.Active === 'Y'} onClick={() => onChange('Active', form.Active === 'Y' ? 'N' : 'Y')}>
-                <span />
-                {form.Active === 'Y' ? 'Y - Active' : 'N - Inactive'}
+                <span className="switch-track"><span className="switch-thumb" /></span>
+                <span className="switch-copy">
+                  <strong>{form.Active === 'Y' ? 'Active' : 'Inactive'}</strong>
+                  <small>{form.Active === 'Y' ? 'On' : 'Off'}</small>
+                </span>
               </button>
             </label>
           </div>
