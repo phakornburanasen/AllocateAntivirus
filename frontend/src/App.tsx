@@ -720,7 +720,7 @@ function ReportsPanel({
           <div>
             <p className="eyebrow">WORKBOOK</p>
             <h3>AllocateAntivirus.xlsx</h3>
-            <p className="muted">Font Angsana New 14 is applied to every sheet.</p>
+            <p className="muted"></p>
           </div>
         </section>
         <section className="report-card">
