@@ -575,7 +575,7 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Asset NA</th>
+                  <th>Asset No</th>
                   <th>Hostname</th>
                   <th>IP Address</th>
                   <th>Username</th>
