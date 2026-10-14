@@ -3,6 +3,8 @@ import type { Worksheet } from 'exceljs'
 import {
   Download,
   Circle,
+  PanelLeftClose,
+  PanelLeftOpen,
   Edit3,
   Eye,
   EyeOff,
@@ -75,6 +77,9 @@ type WorkspaceTab = 'assets' | 'reports'
 const DEFAULT_API_BASE = `http://${window.location.hostname}:10101/api/AllocateAntivirus`
 const API_BASE = (import.meta.env.VITE_API_BASE || DEFAULT_API_BASE).replace(/\/$/, '')
 const SESSION_KEY = 'allocate_antivirus_login_session'
+const WORKSPACE_TAB_KEY = 'allocate_antivirus_workspace_tab'
+const CONTROL_CARD_KEY = 'allocate_antivirus_control_card_visible'
+const PAGE_SIZE = 10
 const emptyForm: AssetForm = {
   id: '',
   action: 'create',
@@ -231,7 +236,10 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [search, setSearch] = useState('')
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>('assets')
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(() => loadWorkspaceTab())
+  const [controlCardVisible, setControlCardVisible] = useState(() => loadControlCardVisibility())
+  const [assetPage, setAssetPage] = useState(1)
+  const [reportPage, setReportPage] = useState(1)
   const [exporting, setExporting] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<AssetRecord | null>(null)
@@ -262,6 +270,34 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
   const activeCount = records.filter((row) => normalizeActive(row.Active) === 'Y').length
   const inactiveCount = records.length - activeCount
   const depSummary = useMemo(() => buildDepSummary(records), [records])
+  const assetPageCount = Math.max(1, Math.ceil(visibleRecords.length / PAGE_SIZE))
+  const reportPageCount = Math.max(1, Math.ceil(depSummary.length / PAGE_SIZE))
+  const paginatedRecords = visibleRecords.slice((assetPage - 1) * PAGE_SIZE, assetPage * PAGE_SIZE)
+
+  useEffect(() => {
+    setAssetPage(1)
+  }, [search])
+
+  useEffect(() => {
+    setAssetPage((page) => Math.min(page, assetPageCount))
+  }, [assetPageCount])
+
+  useEffect(() => {
+    setReportPage((page) => Math.min(page, reportPageCount))
+  }, [reportPageCount])
+
+  function selectTab(tab: WorkspaceTab) {
+    setActiveTab(tab)
+    window.localStorage.setItem(WORKSPACE_TAB_KEY, tab)
+  }
+
+  function toggleControlCard() {
+    setControlCardVisible((visible) => {
+      const nextVisible = !visible
+      window.localStorage.setItem(CONTROL_CARD_KEY, String(nextVisible))
+      return nextVisible
+    })
+  }
 
   async function loadAssets(options: { silent?: boolean } = {}) {
     const silent = options.silent ?? records.length > 0
@@ -446,8 +482,8 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
             </div>
           </div>
           <nav className="top-nav" aria-label="Main navigation">
-            <button type="button" className={activeTab === 'assets' ? 'nav-pill is-active' : 'nav-pill'} onClick={() => setActiveTab('assets')}>Assets</button>
-            <button type="button" className={activeTab === 'reports' ? 'nav-pill is-active' : 'nav-pill'} onClick={() => setActiveTab('reports')}>Reports</button>
+            <button type="button" className={activeTab === 'assets' ? 'nav-pill is-active' : 'nav-pill'} onClick={() => selectTab('assets')}>Assets</button>
+            <button type="button" className={activeTab === 'reports' ? 'nav-pill is-active' : 'nav-pill'} onClick={() => selectTab('reports')}>Reports</button>
           </nav>
           <div className="topbar-actions">
             <div className="header-status" role="status">
@@ -466,27 +502,27 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
         </div>
       </header>
 
-      <main className="workspace-grid">
-        <aside className="side-panel">
-          <section className="panel-card">
-            <p className="eyebrow">ALLOCATE ANTIVIRUS</p>
-            <h2>Asset Control</h2>
-            <p className="muted">Manage antivirus allocation records and device images.</p>
-            <button type="button" className="primary-button wide" onClick={openCreate}>
-              <Plus size={18} />
-              Add Asset
-            </button>
-            <button type="button" className="outline-button wide side-action" onClick={() => setActiveTab('reports')}>
-              <FileSpreadsheet size={18} />
-              Reports
-            </button>
-            <div className="stats-grid">
-              <Stat label="Total" value={records.length} />
-              <Stat label="Active" value={activeCount} />
-              <Stat label="Inactive" value={inactiveCount} />
-            </div>
-          </section>
-        </aside>
+      <main className={activeTab === 'reports' ? 'workspace-grid reports-layout' : controlCardVisible ? 'workspace-grid' : 'workspace-grid assets-card-hidden'}>
+         {activeTab === 'assets' && controlCardVisible && <aside className="side-panel" id="asset-control-panel">
+             <section className="panel-card control-card" aria-label="Allocate Antivirus controls">
+               <p className="eyebrow">ALLOCATE ANTIVIRUS</p>
+               <h2>Asset Control</h2>
+               <p className="muted">Manage antivirus allocation records and device images.</p>
+               <button type="button" className="primary-button wide" onClick={openCreate}>
+                 <Plus size={18} />
+                 Add Asset
+               </button>
+               <button type="button" className="outline-button wide side-action" onClick={() => selectTab('reports')}>
+                 <FileSpreadsheet size={18} />
+                 Reports
+               </button>
+               <div className="stats-grid">
+                 <Stat label="Total" value={records.length} />
+                 <Stat label="Active" value={activeCount} />
+                 <Stat label="Inactive" value={inactiveCount} />
+               </div>
+             </section>
+          </aside>}
 
         {activeTab === 'reports' ? (
           <ReportsPanel
@@ -496,19 +532,26 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
             noticeType={error ? 'error' : 'success'}
             exporting={exporting}
             refreshing={refreshing}
+            page={reportPage}
+            pageCount={reportPageCount}
             onRefresh={() => void loadAssets({ silent: true })}
             onExport={() => void exportReport()}
+            onPageChange={setReportPage}
           />
         ) : (
         <section className="content-panel">
-          <div className="content-header">
-            <div>
-              <p className="eyebrow">ASSET LIST</p>
-              <h2>Allocate Antivirus Records</h2>
-              <p className="muted">{visibleRecords.length} records visible</p>
-            </div>
-            <div className="toolbar">
-              <button type="button" className="outline-button" onClick={() => void loadAssets({ silent: true })}>
+           <div className="content-header">
+             <div>
+               <p className="eyebrow">ASSET LIST</p>
+               <h2>Allocate Antivirus Records</h2>
+               <p className="muted">{visibleRecords.length} records visible</p>
+             </div>
+             <div className="toolbar">
+               <button type="button" className="outline-button" onClick={toggleControlCard} aria-controls="asset-control-panel" aria-expanded={controlCardVisible} title={controlCardVisible ? 'Hide control panel' : 'Show control panel'}>
+                 {controlCardVisible ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+                 {controlCardVisible ? 'Hide panel' : 'Show panel'}
+               </button>
+               <button type="button" className="outline-button" onClick={() => void loadAssets({ silent: true })}>
                 <RefreshCw size={16} />
                 Refresh
               </button>
@@ -521,8 +564,8 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
 
           <div className="search-row">
             <Search size={17} />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search hostname, IP, user, note..." />
-            {search && <button type="button" onClick={() => setSearch('')} aria-label="Clear search"><X size={16} /></button>}
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ค้นหา..." />
+             {search && <button type="button" className="search-clear-button" onClick={() => setSearch('')} aria-label="Clear search" title="Clear search"><X size={14} /></button>}
           </div>
 
           {(error || message) && <div className={error ? 'notice error' : 'notice success'}>{error || message}</div>}
@@ -550,9 +593,9 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
                 ) : visibleRecords.length === 0 ? (
                   <tr><td colSpan={11}><div className="empty-state">No records found.</div></td></tr>
                 ) : (
-                  visibleRecords.map((row, index) => (
-                    <tr key={row.id}>
-                      <td className="cell-index">{index + 1}</td>
+                   paginatedRecords.map((row, index) => (
+                     <tr key={row.id}>
+                       <td className="cell-index">{(assetPage - 1) * PAGE_SIZE + index + 1}</td>
                       <td className="font-medium">{row.asset_na || '-'}</td>
                       <td className="font-semibold">{row.hostname || '-'}</td>
                       <td>{row.ip_address || '-'}</td>
@@ -581,8 +624,9 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
                 )}
               </tbody>
             </table>
-          </div>
-        </section>
+           </div>
+           <PaginationControls page={assetPage} pageCount={assetPageCount} total={visibleRecords.length} onPageChange={setAssetPage} />
+         </section>
         )}
       </main>
 
@@ -629,8 +673,11 @@ function ReportsPanel({
   noticeType,
   exporting,
   refreshing,
+  page,
+  pageCount,
   onRefresh,
   onExport,
+  onPageChange,
 }: {
   records: AssetRecord[]
   depSummary: Array<{ dep: string; count: number }>
@@ -638,9 +685,15 @@ function ReportsPanel({
   noticeType: 'error' | 'success'
   exporting: boolean
   refreshing: boolean
+  page: number
+  pageCount: number
   onRefresh: () => void
   onExport: () => void
+  onPageChange: (page: number) => void
 }) {
+  const maxDepCount = Math.max(1, ...depSummary.map((item) => item.count))
+  const paginatedDepSummary = depSummary.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
   return (
     <section className="content-panel report-panel">
       <div className="content-header">
@@ -680,6 +733,29 @@ function ReportsPanel({
         </section>
       </div>
 
+      <section className="dep-chart-card" aria-labelledby="dep-chart-title">
+        <div className="section-title">
+          <div>
+            <p className="eyebrow">DEP DISTRIBUTION</p>
+            <h3 id="dep-chart-title">Asset count by DEP</h3>
+          </div>
+          <span className="muted">{depSummary.length} departments</span>
+        </div>
+        {depSummary.length === 0 ? (
+          <div className="empty-state">No DEP data to chart.</div>
+        ) : (
+          <div className="dep-chart">
+            {depSummary.map((item) => (
+              <div className="dep-chart-row" key={item.dep}>
+                <div className="dep-chart-label" title={item.dep}>{item.dep}</div>
+                <div className="dep-chart-track"><span className="dep-chart-bar" style={{ width: `${Math.max(5, (item.count / maxDepCount) * 100)}%` }} /></div>
+                <strong className="dep-chart-value">{item.count}</strong>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       {notice && <div className={noticeType === 'error' ? 'notice error' : 'notice success'}>{notice}</div>}
 
       <div className="table-wrap report-summary">
@@ -695,18 +771,19 @@ function ReportsPanel({
             {depSummary.length === 0 ? (
               <tr><td colSpan={3}><div className="empty-state">No DEP data to summarize.</div></td></tr>
             ) : (
-              depSummary.map((item, index) => (
-                <tr key={item.dep}>
-                  <td className="cell-index">{index + 1}</td>
+               paginatedDepSummary.map((item, index) => (
+                 <tr key={item.dep}>
+                   <td className="cell-index">{(page - 1) * PAGE_SIZE + index + 1}</td>
                   <td className="font-semibold">{item.dep}</td>
                   <td>{item.count}</td>
                 </tr>
               ))
             )}
           </tbody>
-        </table>
-      </div>
-    </section>
+         </table>
+       </div>
+       <PaginationControls page={page} pageCount={pageCount} total={depSummary.length} onPageChange={onPageChange} />
+     </section>
   )
 }
 
@@ -742,36 +819,54 @@ function AssetModal({
           <div>
             <p className="eyebrow">ASSET DETAILS</p>
             <h2 id="asset-modal-title">{form.action === 'create' ? 'Add Asset' : 'Edit Asset'}</h2>
-            <p className="muted">Record fields are saved to dbo.allocate_antivirus.</p>
+            <p className="muted">Record fields are saved.</p>
           </div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close"><X size={18} /></button>
         </header>
         <form onSubmit={onSubmit} className="modal-body">
-          <div className="form-grid">
-            <TextField label="Asset NA" value={form.asset_na} onChange={(value) => onChange('asset_na', value)} />
-            <TextField label="Hostname" value={form.hostname} onChange={(value) => onChange('hostname', value)} required />
-            <TextField label="IP Address" value={form.ip_address} onChange={(value) => onChange('ip_address', value)} />
-            <TextField label="Username" value={form.username} onChange={(value) => onChange('username', value)} />
-            <TextField label="Users" value={form.users} onChange={(value) => onChange('users', value)} />
-            <TextField label="Dep" value={form.dep} onChange={(value) => onChange('dep', value)} />
-            <label className="field">
-              <span>Active</span>
-              <button type="button" className="active-switch" aria-pressed={form.Active === 'Y'} onClick={() => onChange('Active', form.Active === 'Y' ? 'N' : 'Y')}>
-                <span className="switch-track"><span className="switch-thumb" /></span>
-                <span className="switch-copy">
-                  <strong>{form.Active === 'Y' ? 'Active' : 'Inactive'}</strong>
-                  <small>{form.Active === 'Y' ? 'On' : 'Off'}</small>
-                </span>
-              </button>
-            </label>
-          </div>
+           <fieldset className="form-group">
+             <legend>Asset identity</legend>
+             <div className="form-grid">
+               <TextField label="Asset No" value={form.asset_na} onChange={(value) => onChange('asset_na', value)} />
+               <TextField label="Hostname" value={form.hostname} onChange={(value) => onChange('hostname', value)} required />
+             </div>
+           </fieldset>
 
-          <label className="field">
-            <span>Note</span>
-            <textarea value={form.note} onChange={(event) => onChange('note', event.target.value)} rows={4} />
-          </label>
+           <fieldset className="form-group">
+             <legend>Network and assignment</legend>
+             <div className="form-grid">
+               <TextField label="IP Address" value={form.ip_address} onChange={(value) => onChange('ip_address', value)} />
+               <TextField label="Username" value={form.username} onChange={(value) => onChange('username', value)} />
+               <TextField label="Users" value={form.users} onChange={(value) => onChange('users', value)} />
+               <TextField label="Dep" value={form.dep} onChange={(value) => onChange('dep', value)} />
+             </div>
+           </fieldset>
 
-          <section className="image-section">
+           <fieldset className="form-group">
+             <legend>Status</legend>
+             <div className="field">
+               <span id="allocation-status-label">Allocation status</span>
+               <button type="button" role="switch" className="active-switch" aria-checked={form.Active === 'Y'} aria-labelledby="allocation-status-label" onClick={() => onChange('Active', form.Active === 'Y' ? 'N' : 'Y')}>
+                 <span className="switch-copy">
+                   <strong>{form.Active === 'Y' ? 'Active' : 'Inactive'}</strong>
+                   <small>{form.Active === 'Y' ? 'Antivirus is allocated to this asset' : 'Antivirus is not allocated to this asset'}</small>
+                 </span>
+                 <span className="switch-track" aria-hidden="true">
+                   <span className="switch-thumb" />
+                 </span>
+               </button>
+             </div>
+           </fieldset>
+
+           <fieldset className="form-group">
+             <legend>Notes</legend>
+             <label className="field">
+               <span>Note</span>
+               <textarea value={form.note} onChange={(event) => onChange('note', event.target.value)} rows={4} />
+             </label>
+           </fieldset>
+
+           <section className="image-section form-group">
             <div className="section-title">
               <div>
                 <h3>Images</h3>
@@ -1048,6 +1143,26 @@ function saveLoginSession(session: LoginSession) {
 
 function clearLoginSession() {
   window.localStorage.removeItem(SESSION_KEY)
+}
+
+function PaginationControls({ page, pageCount, total, onPageChange }: { page: number; pageCount: number; total: number; onPageChange: (page: number) => void }) {
+  return (
+    <div className="pagination-bar" aria-label="Table pagination">
+      <span className="pagination-summary">{total === 0 ? 'No records' : `Page ${page} of ${pageCount} · ${total} records`}</span>
+      <div className="pagination-actions">
+        <button type="button" className="outline-button pagination-button" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Previous</button>
+        <button type="button" className="outline-button pagination-button" disabled={page >= pageCount} onClick={() => onPageChange(page + 1)}>Next</button>
+      </div>
+    </div>
+  )
+}
+
+function loadWorkspaceTab(): WorkspaceTab {
+  return window.localStorage.getItem(WORKSPACE_TAB_KEY) === 'reports' ? 'reports' : 'assets'
+}
+
+function loadControlCardVisibility() {
+  return window.localStorage.getItem(CONTROL_CARD_KEY) !== 'false'
 }
 
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 30000) {
