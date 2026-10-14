@@ -80,6 +80,7 @@ button:disabled { cursor: not-allowed; opacity: 0.72; }
 .outline-button:hover { border-color: rgb(15 123 120 / 35%); background: #f7fbfb; }
 .danger-button { border: 0; background: var(--danger); color: #fff; }
 .wide { width: 100%; }
+.side-action { margin-top: 10px; }
 .spin { animation: spin 900ms linear infinite; }
 
 .app-shell { min-height: 100dvh; background: #f5f7fa; }
@@ -141,6 +142,16 @@ button:disabled { cursor: not-allowed; opacity: 0.72; }
 .icon-button.danger { color: var(--danger); }
 .empty-state { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 180px; color: var(--muted); }
 
+.report-panel { padding-bottom: 22px; }
+.report-grid { display: grid; grid-template-columns: minmax(280px, 1fr) repeat(2, minmax(140px, 220px)); gap: 14px; padding: 0 22px 18px; }
+.report-card { display: flex; min-height: 112px; align-items: center; gap: 14px; border: 1px solid var(--border); border-radius: 12px; background: #fff; padding: 18px; }
+.report-card h3 { margin: 0; color: #172032; font-size: 18px; }
+.report-card > strong { color: var(--primary); font-size: 34px; line-height: 1; }
+.report-card > span { color: var(--muted); font-size: 13px; font-weight: 700; }
+.report-icon { display: grid; width: 48px; height: 48px; flex: 0 0 auto; place-items: center; border-radius: 12px; background: var(--secondary); color: var(--primary); }
+.report-summary { margin: 0 22px; border: 1px solid var(--border); border-radius: 12px; }
+.report-summary .asset-table { min-width: 520px; }
+
 .modal-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; background: rgb(9 20 42 / 48%); padding: 20px; }
 .asset-modal, .confirm-modal, .image-viewer { width: min(100%, 760px); max-height: calc(100dvh - 40px); overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: #fff; box-shadow: 0 24px 80px rgb(17 24 39 / 22%); }
 .asset-modal { display: flex; flex-direction: column; margin: auto 0; }
@@ -197,6 +208,7 @@ button:disabled { cursor: not-allowed; opacity: 0.72; }
   .top-nav { justify-content: flex-start; }
   .topbar-actions { justify-content: flex-start; }
   .workspace-grid { grid-template-columns: 1fr; padding: 18px; }
+  .report-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 680px) {

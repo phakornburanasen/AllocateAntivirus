@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
+import type { Worksheet } from 'exceljs'
 import {
+  Download,
   Circle,
   Edit3,
   Eye,
   EyeOff,
+  FileSpreadsheet,
   ImageIcon,
   Loader2,
   LogOut,
@@ -66,6 +69,8 @@ type PendingImage = {
   file: File
   previewUrl: string
 }
+
+type WorkspaceTab = 'assets' | 'reports'
 
 const DEFAULT_API_BASE = `http://${window.location.hostname}:10101/api/AllocateAntivirus`
 const API_BASE = (import.meta.env.VITE_API_BASE || DEFAULT_API_BASE).replace(/\/$/, '')
@@ -226,6 +231,8 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [search, setSearch] = useState('')
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>('assets')
+  const [exporting, setExporting] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<AssetRecord | null>(null)
   const [viewerImage, setViewerImage] = useState('')
@@ -254,6 +261,7 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
 
   const activeCount = records.filter((row) => normalizeActive(row.Active) === 'Y').length
   const inactiveCount = records.length - activeCount
+  const depSummary = useMemo(() => buildDepSummary(records), [records])
 
   async function loadAssets(options: { silent?: boolean } = {}) {
     const silent = options.silent ?? records.length > 0
@@ -409,6 +417,22 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
     }
   }
 
+  async function exportReport() {
+    setExporting(true)
+    setError('')
+    setMessage('')
+    try {
+      const exportRows = await fetchAssetRecords()
+      setRecords(exportRows)
+      await exportAllocateAntivirusWorkbook(exportRows)
+      setMessage('Report exported')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Export failed')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -422,7 +446,8 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
             </div>
           </div>
           <nav className="top-nav" aria-label="Main navigation">
-            <button type="button" className="nav-pill is-active">Assets</button>
+            <button type="button" className={activeTab === 'assets' ? 'nav-pill is-active' : 'nav-pill'} onClick={() => setActiveTab('assets')}>Assets</button>
+            <button type="button" className={activeTab === 'reports' ? 'nav-pill is-active' : 'nav-pill'} onClick={() => setActiveTab('reports')}>Reports</button>
           </nav>
           <div className="topbar-actions">
             <div className="header-status" role="status">
@@ -451,6 +476,10 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
               <Plus size={18} />
               Add Asset
             </button>
+            <button type="button" className="outline-button wide side-action" onClick={() => setActiveTab('reports')}>
+              <FileSpreadsheet size={18} />
+              Reports
+            </button>
             <div className="stats-grid">
               <Stat label="Total" value={records.length} />
               <Stat label="Active" value={activeCount} />
@@ -459,6 +488,18 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
           </section>
         </aside>
 
+        {activeTab === 'reports' ? (
+          <ReportsPanel
+            records={records}
+            depSummary={depSummary}
+            notice={error || message}
+            noticeType={error ? 'error' : 'success'}
+            exporting={exporting}
+            refreshing={refreshing}
+            onRefresh={() => void loadAssets({ silent: true })}
+            onExport={() => void exportReport()}
+          />
+        ) : (
         <section className="content-panel">
           <div className="content-header">
             <div>
@@ -542,6 +583,7 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
             </table>
           </div>
         </section>
+        )}
       </main>
 
       {modalOpen && (
@@ -577,6 +619,94 @@ function Workspace({ session, onLogout }: { session: LoginSession; onLogout: () 
         </div>
       )}
     </div>
+  )
+}
+
+function ReportsPanel({
+  records,
+  depSummary,
+  notice,
+  noticeType,
+  exporting,
+  refreshing,
+  onRefresh,
+  onExport,
+}: {
+  records: AssetRecord[]
+  depSummary: Array<{ dep: string; count: number }>
+  notice: string
+  noticeType: 'error' | 'success'
+  exporting: boolean
+  refreshing: boolean
+  onRefresh: () => void
+  onExport: () => void
+}) {
+  return (
+    <section className="content-panel report-panel">
+      <div className="content-header">
+        <div>
+          <p className="eyebrow">REPORTS</p>
+          <h2>Allocate Antivirus Export</h2>
+          <p className="muted">Export Excel with main sheet, DEP sheets, and Sumary_Report.</p>
+        </div>
+        <div className="toolbar">
+          <button type="button" className="outline-button" onClick={onRefresh} disabled={refreshing}>
+            {refreshing ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
+            Refresh
+          </button>
+          <button type="button" className="primary-button" onClick={onExport} disabled={exporting}>
+            {exporting ? <Loader2 className="spin" size={16} /> : <Download size={16} />}
+            Export Excel
+          </button>
+        </div>
+      </div>
+
+      <div className="report-grid">
+        <section className="report-card">
+          <div className="report-icon"><FileSpreadsheet size={24} /></div>
+          <div>
+            <p className="eyebrow">WORKBOOK</p>
+            <h3>AllocateAntivirus.xlsx</h3>
+            <p className="muted">Font Angsana New 14 is applied to every sheet.</p>
+          </div>
+        </section>
+        <section className="report-card">
+          <strong>{records.length}</strong>
+          <span>Total Records</span>
+        </section>
+        <section className="report-card">
+          <strong>{depSummary.length}</strong>
+          <span>DEP Sheets</span>
+        </section>
+      </div>
+
+      {notice && <div className={noticeType === 'error' ? 'notice error' : 'notice success'}>{notice}</div>}
+
+      <div className="table-wrap report-summary">
+        <table className="asset-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>DEP Sheet</th>
+              <th>Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            {depSummary.length === 0 ? (
+              <tr><td colSpan={3}><div className="empty-state">No DEP data to summarize.</div></td></tr>
+            ) : (
+              depSummary.map((item, index) => (
+                <tr key={item.dep}>
+                  <td className="cell-index">{index + 1}</td>
+                  <td className="font-semibold">{item.dep}</td>
+                  <td>{item.count}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
 
@@ -719,6 +849,150 @@ function Stat({ label, value }: { label: string; value: number }) {
       <span>{label}</span>
     </div>
   )
+}
+
+async function fetchAssetRecords() {
+  const res = await fetch(`${API_BASE}/assets?action=read`)
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Load failed')
+  return Array.isArray(data) ? data as AssetRecord[] : []
+}
+
+async function exportAllocateAntivirusWorkbook(records: AssetRecord[]) {
+  const ExcelJS = (await import('exceljs')).default
+  const workbook = new ExcelJS.Workbook()
+  workbook.creator = 'AllocateAntivirus'
+  workbook.created = new Date()
+  workbook.modified = new Date()
+
+  const usedNames = new Set<string>()
+  const mainSheet = workbook.addWorksheet('AllocateAntivirus')
+  usedNames.add(mainSheet.name.toLowerCase())
+  fillReportSheet(mainSheet, records)
+
+  const grouped = groupByDep(records)
+  for (const [dep, rows] of grouped) {
+    const sheet = workbook.addWorksheet(uniqueSheetName(dep, usedNames))
+    fillReportSheet(sheet, rows)
+  }
+
+  const summarySheet = workbook.addWorksheet('Sumary_Report')
+  fillSummarySheet(summarySheet, grouped)
+
+  const buffer = await workbook.xlsx.writeBuffer()
+  const blob = new Blob([buffer as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `AllocateAntivirus_${fileDate(new Date())}.xlsx`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function fillReportSheet(sheet: Worksheet, records: AssetRecord[]) {
+  sheet.columns = [
+    { header: 'HOSTNAME', key: 'hostname', width: 24 },
+    { header: 'IP ADDRESS', key: 'ip_address', width: 18 },
+    { header: 'USERNAME', key: 'username', width: 18 },
+    { header: 'USERS', key: 'users', width: 24 },
+    { header: 'DEP', key: 'dep', width: 18 },
+    { header: 'NOTE', key: 'note', width: 36 },
+    { header: 'ACTIVE', key: 'Active', width: 12 },
+  ]
+  records.forEach((record) => {
+    sheet.addRow({
+      hostname: cellText(record.hostname),
+      ip_address: cellText(record.ip_address),
+      username: cellText(record.username),
+      users: cellText(record.users),
+      dep: depName(record.dep),
+      note: cellText(record.note),
+      Active: normalizeActive(record.Active),
+    })
+  })
+  styleWorksheet(sheet)
+}
+
+function fillSummarySheet(sheet: Worksheet, grouped: Map<string, AssetRecord[]>) {
+  sheet.columns = [
+    { header: 'DEP', key: 'dep', width: 24 },
+    { header: 'COUNT', key: 'count', width: 14 },
+  ]
+  Array.from(grouped.entries()).forEach(([dep, rows]) => {
+    sheet.addRow({ dep, count: rows.length })
+  })
+  styleWorksheet(sheet)
+}
+
+function styleWorksheet(sheet: Worksheet) {
+  sheet.eachRow((row) => {
+    row.eachCell((cell) => {
+      cell.font = { name: 'Angsana New', size: 14 }
+      cell.alignment = { vertical: 'middle', wrapText: true }
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFD8E3EF' } },
+        left: { style: 'thin', color: { argb: 'FFD8E3EF' } },
+        bottom: { style: 'thin', color: { argb: 'FFD8E3EF' } },
+        right: { style: 'thin', color: { argb: 'FFD8E3EF' } },
+      }
+    })
+  })
+  const header = sheet.getRow(1)
+  header.eachCell((cell) => {
+    cell.font = { name: 'Angsana New', size: 14, bold: true }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5F3' } }
+  })
+  sheet.views = [{ state: 'frozen', ySplit: 1 }]
+  sheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: 1, column: sheet.columnCount },
+  }
+}
+
+function groupByDep(records: AssetRecord[]) {
+  const grouped = new Map<string, AssetRecord[]>()
+  records.forEach((record) => {
+    const key = depName(record.dep)
+    grouped.set(key, [...(grouped.get(key) || []), record])
+  })
+  return new Map(Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b)))
+}
+
+function buildDepSummary(records: AssetRecord[]) {
+  return Array.from(groupByDep(records).entries()).map(([dep, rows]) => ({ dep, count: rows.length }))
+}
+
+function depName(value?: string | null) {
+  return cellText(value) || 'NO_DEP'
+}
+
+function uniqueSheetName(value: string, usedNames: Set<string>) {
+  const base = sanitizeSheetName(value)
+  let name = base
+  let index = 2
+  while (usedNames.has(name.toLowerCase())) {
+    const suffix = `_${index}`
+    name = `${base.slice(0, 31 - suffix.length)}${suffix}`
+    index += 1
+  }
+  usedNames.add(name.toLowerCase())
+  return name
+}
+
+function sanitizeSheetName(value: string) {
+  const cleaned = value.replace(/[\\/?*:[\]]/g, ' ').replace(/\s+/g, ' ').trim()
+  return (cleaned || 'NO_DEP').slice(0, 31)
+}
+
+function cellText(value?: string | null) {
+  return String(value || '').trim()
+}
+
+function fileDate(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}`
 }
 
 function buildFormData(form: AssetForm, pendingImages: PendingImage[], removedImages: string[]) {
